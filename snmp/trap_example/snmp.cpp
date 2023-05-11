@@ -8,14 +8,23 @@
 
 namespace snmp
 {
-void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet, const bool isEncryptionKeySet)
+void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet,
+              const bool isEncryptionKeySet)
 {
     using namespace std::string_literals;
     using namespace std::string_view_literals;
     constexpr std::string_view snmpV2c = "SNMPv2c"sv;
     constexpr std::string_view snmpV3 = "SNMPv3"sv;
 
-    const auto SNMPversion = SNMP_VERSION_3;
+    auto version = SNMP_VERSION_3;
+    if (snmpVersion == snmpV2c)
+    {
+        version = SNMP_VERSION_2c;
+    }
+    else if (snmpVersion == snmpV3)
+    {
+        version = SNMP_VERSION_3;
+    }
 
     // Initialize the SNMP library
     init_snmp("snmpapp");
@@ -27,84 +36,112 @@ void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet,
     constexpr auto peername = "127.0.0.1:162";
     session.peername = const_cast<char*>(peername);
 
-    if (SNMPversion == SNMP_VERSION_3)
+    if (version == SNMP_VERSION_3)
     {
-        std::cerr << "snmp: version 3 is used" << std::endl;
         session.version = SNMP_VERSION_3;
         std::cerr << "snmp: session.version: " << session.version << "\n";
 
-        // const unsigned char engineID[] = {0x01, 0x02, 0x03, 0x04, 0x05};
-        const unsigned char engineID[] = {0x02, 0x03, 0x04, 0x05, 0x06};
-        session.securityEngineID = (u_char*)engineID;
-        session.securityEngineIDLen = sizeof(engineID) / sizeof(engineID[0]);
-        std::cerr << "snmp: session.securityEngineID: "
-                  << session.securityEngineID << "\n";
-        std::cerr << "snmp: session.securityEngineIDLen: "
-                  << session.securityEngineIDLen << "\n";
-
-        // const std::string username = "user1"s;
-        const std::string username = "user2"s;
-        session.securityName = const_cast<char*>(username.data());
-        session.securityNameLen = strlen(session.securityName);
-        std::cerr << "snmp: session.securityName: " << session.securityName
-                  << "\n";
-        std::cerr << "snmp: session.securityNameLen: "
-                  << session.securityNameLen << "\n";
-
-        // session.securityLevel = SNMP_SEC_LEVEL_NOAUTH;
-        session.securityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
-        // SNMP_SEC_LEVEL_AUTHPRIV
-
-        const std::string securityAuthProto = "SHA"s;
-        session.securityAuthProto = usmHMACSHA1AuthProtocol;
-        session.securityAuthProtoLen =
-            sizeof(usmHMACSHA1AuthProtocol) / sizeof(oid);
-        std::cerr << "snmp: session.securityAuthProto: "
-                  << session.securityAuthProto << "\n";
-        std::cerr << "snmp: session.securityAuthProtoLen: "
-                  << session.securityAuthProtoLen << "\n";
-
-        const auto securityAuthKey = "authPass";
-        session.securityAuthKeyLen = USM_AUTH_KU_LEN;
-
-        if (generate_Ku(session.securityAuthProto, session.securityAuthProtoLen,
-                        (u_char*)(securityAuthKey), strlen(securityAuthKey),
-                        session.securityAuthKey,
-                        &session.securityAuthKeyLen) != SNMPERR_SUCCESS)
+        std::string username;
+        auto level = SNMP_SEC_LEVEL_NOAUTH;
+        unsigned char engineID[5] = {0x0, 0x0, 0x0, 0x0, 0x0};
+        if (!isAuthenticationKeySet && !isEncryptionKeySet)
         {
-            snmp_log(LOG_ERR,
-                     "Error generating Ku from authentication pass phrase. \n");
-            return;
+            level = SNMP_SEC_LEVEL_NOAUTH;
+            engineID[0] = 0x01;
+            engineID[1] = 0x02;
+            engineID[2] = 0x03;
+            engineID[3] = 0x04;
+            engineID[4] = 0x05;
+            username = "user1"s;
+        }
+        else if (isAuthenticationKeySet && !isEncryptionKeySet)
+        {
+            level = SNMP_SEC_LEVEL_AUTHNOPRIV;
+            engineID[0] = 0x02;
+            engineID[1] = 0x03;
+            engineID[2] = 0x04;
+            engineID[3] = 0x05;
+            engineID[4] = 0x06;
+            username = "user2"s;
+
+            session.securityAuthProto = usmHMACSHA1AuthProtocol;
+            session.securityAuthProtoLen =
+                sizeof(usmHMACSHA1AuthProtocol) / sizeof(oid);
+
+            const auto securityAuthKey = "authPass";
+            session.securityAuthKeyLen = USM_AUTH_KU_LEN;
+
+            if (generate_Ku(session.securityAuthProto,
+                            session.securityAuthProtoLen,
+                            (u_char*)(securityAuthKey), strlen(securityAuthKey),
+                            session.securityAuthKey,
+                            &session.securityAuthKeyLen) != SNMPERR_SUCCESS)
+            {
+                snmp_log(
+                    LOG_ERR,
+                    "Error generating Ku from authentication pass phrase. \n");
+                return;
+            }
+        }
+        else if (isAuthenticationKeySet && isEncryptionKeySet)
+        {
+            level = SNMP_SEC_LEVEL_AUTHNOPRIV;
+            engineID[0] = 0x03;
+            engineID[1] = 0x04;
+            engineID[2] = 0x05;
+            engineID[3] = 0x06;
+            engineID[4] = 0x07;
+            username = "user3"s;
+
+            session.securityAuthProto = usmHMACSHA1AuthProtocol;
+            session.securityAuthProtoLen =
+                sizeof(usmHMACSHA1AuthProtocol) / sizeof(oid);
+
+            const auto securityAuthKey = "authPass";
+            session.securityAuthKeyLen = USM_AUTH_KU_LEN;
+
+            if (generate_Ku(session.securityAuthProto,
+                            session.securityAuthProtoLen,
+                            (u_char*)(securityAuthKey), strlen(securityAuthKey),
+                            session.securityAuthKey,
+                            &session.securityAuthKeyLen) != SNMPERR_SUCCESS)
+            {
+                snmp_log(
+                    LOG_ERR,
+                    "Error generating Ku from authentication pass phrase. \n");
+                return;
+            }
+
+            session.securityPrivProto = usmAESPrivProtocol;
+            session.securityPrivProtoLen =
+                sizeof(usmAESPrivProtocol) / sizeof(oid);
+
+            const auto securityPrivKey = "privPass";
+            session.securityPrivKeyLen = USM_PRIV_KU_LEN;
+
+            if (generate_Ku(session.securityAuthProto,
+                            session.securityAuthProtoLen,
+                            (u_char*)(securityPrivKey), strlen(securityPrivKey),
+                            session.securityPrivKey,
+                            &session.securityPrivKeyLen) != SNMPERR_SUCCESS)
+            {
+                char* error = nullptr;
+                snmp_perror(error);
+                std::cerr << "Error generating Ku from encription pass phrase: "
+                          << error << "\n";
+                return;
+            }
         }
 
-        std::cerr << "snmp: session.securityAuthKey: "
-                  << session.securityAuthKey << "\n";
-        std::cerr << "snmp: session.securityAuthKeyLen: "
-                  << session.securityAuthKeyLen << "\n";
+        session.securityEngineID = const_cast<unsigned char*>(engineID);
+        session.securityEngineIDLen = sizeof(engineID) / sizeof(engineID[0]);
 
-        /*
-                auto securityPrivProto = "AES";
-                session.securityPrivProto = usmAES128PrivProtocol;
-                session.securityPrivProtoLen = USM_PRIV_PROTO_AES128_LEN;
-                std::cerr << "snmp: session.securityPrivProto: " <<
-           session.securityPrivProto << "\n"; std::cerr << "snmp:
-           session.securityPrivProtoLen: " << session.securityPrivProtoLen <<
-           "\n";
+        session.securityName = const_cast<char*>(username.data());
+        session.securityNameLen = strlen(session.securityName);
 
-                const std::string securityPrivKey = "mySecurePrivPassword"s;
-                if (securityPrivKey.size() < USM_AUTH_KU_LEN - 1)
-                {
-                    std::memcpy(session.securityPrivKey,
-           securityPrivKey.c_str(), securityPrivKey.size());
-                    session.securityPrivKeyLen = securityAuthKey.size();
-
-                }
-                std::cerr << "snmp: session.securityPrivKey: " <<
-           session.securityPrivKey << "\n"; std::cerr << "snmp:
-           session.securityPrivKeyLen: " << session.securityPrivKeyLen << "\n";
-        */
+        session.securityLevel = level;
     }
-    else if (SNMPversion == SNMP_VERSION_2c)
+    else if (version == SNMP_VERSION_2c)
     {
         std::cerr << "snmp: version 2c is used" << std::endl;
         session.version = SNMP_VERSION_2c;
@@ -164,7 +201,10 @@ void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet,
 
     // Add trap message
     std::vector<oid> messageOID = {1, 3, 6, 1, 4, 1, 49871, 1, 0, 1, 1};
-    std::string message = "Test trap";
+    std::string message = "Test trap ("s + "version: "s + snmpVersion +
+                          " auth: "s + std::to_string(isAuthenticationKeySet) +
+                          " priv: "s + std::to_string(isEncryptionKeySet) +
+                          ")"s;
     if (!snmp_pdu_add_variable(pdu, messageOID.data(), messageOID.size(),
                                ASN_OCTET_STR, message.c_str(), message.size()))
     {

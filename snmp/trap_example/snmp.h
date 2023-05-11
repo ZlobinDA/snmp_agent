@@ -4,5 +4,6 @@
 
 namespace snmp
 {
-void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet, const bool isEncryptionKeySet);
+void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet,
+              const bool isEncryptionKeySet);
 }
