@@ -1,176 +1,150 @@
 #include "snmp.h"
+#include "snmp_exception.h"
 
-#include <net-snmp/net-snmp-config.h>
-#include <net-snmp/net-snmp-includes.h>
-
-#include <iostream>
+#include <sstream>
 #include <vector>
 
 namespace snmp
 {
-void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet,
-              const bool isEncryptionKeySet)
+
+Agent::Agent(std::string_view appName) : appName_{appName}
 {
-    using namespace std::string_literals;
-    using namespace std::string_view_literals;
-    constexpr std::string_view snmpV2c = "SNMPv2c"sv;
-    constexpr std::string_view snmpV3 = "SNMPv3"sv;
+    init_snmp(appName_.c_str());
 
-    auto version = SNMP_VERSION_3;
-    if (snmpVersion == snmpV2c)
+    snmp_sess_init(&session_);
+    session_.callback = nullptr;
+    session_.callback_magic = nullptr;
+}
+
+Agent::~Agent()
+{
+    snmp_shutdown(appName_.c_str());
+}
+
+void Agent::setVersion(std::string_view version)
+{
+    if (version == version2c)
     {
-        version = SNMP_VERSION_2c;
+        session_.version = SNMP_VERSION_2c;
     }
-    else if (snmpVersion == snmpV3)
+    else if (version == snmpV3)
     {
-        version = SNMP_VERSION_3;
+        session_.version = SNMP_VERSION_3;
     }
+}
 
-    // Initialize the SNMP library
-    init_snmp("snmpapp");
+void Agent::setCommunityString(std::string_view community)
+{
+    session_.community =
+        reinterpret_cast<u_char*>(const_cast<char*>(community.data()));
+    session_.community_len = community.size();
+}
 
-    // Make struct that holdds infomation about who we're going to  be talking.
-    snmp_session session;
-    snmp_sess_init(&session);
+void Agent::setUsername(std::string_view username)
+{
+    session_.securityName = const_cast<char*>(username.data());
+    session_.securityNameLen = strlen(session_.securityName);
+}
 
-    constexpr auto peername = "127.0.0.1:162";
-    session.peername = const_cast<char*>(peername);
+void Agent::setPeername(std::string_view peername)
+{
+    session_.peername = const_cast<char*>(peername.data());
+}
 
-    if (version == SNMP_VERSION_3)
+void Agent::setEngineID(std::string_view engineID)
+{
+    static std::vector<unsigned char> securityEngineID = {0x00, 0x00, 0x00,
+                                                          0x00, 0x00};
+    securityEngineID = getBytesFromEngineIDString(engineID);
+    session_.securityEngineID = securityEngineID.data();
+    session_.securityEngineIDLen = securityEngineID.size();
+}
+
+std::vector<unsigned char>
+    Agent::getBytesFromEngineIDString(std::string_view engineID) const
+{
+    std::vector<unsigned char> result;
+    std::istringstream id{std::string(engineID)};
+    unsigned int byte;
+    while (id >> std::hex >> byte)
     {
-        session.version = SNMP_VERSION_3;
-        std::cerr << "snmp: session.version: " << session.version << "\n";
-
-        std::string username;
-        auto level = SNMP_SEC_LEVEL_NOAUTH;
-        unsigned char engineID[5] = {0x0, 0x0, 0x0, 0x0, 0x0};
-        if (!isAuthenticationKeySet && !isEncryptionKeySet)
-        {
-            level = SNMP_SEC_LEVEL_NOAUTH;
-            engineID[0] = 0x01;
-            engineID[1] = 0x02;
-            engineID[2] = 0x03;
-            engineID[3] = 0x04;
-            engineID[4] = 0x05;
-            username = "user1"s;
-        }
-        else if (isAuthenticationKeySet && !isEncryptionKeySet)
-        {
-            level = SNMP_SEC_LEVEL_AUTHNOPRIV;
-            engineID[0] = 0x02;
-            engineID[1] = 0x03;
-            engineID[2] = 0x04;
-            engineID[3] = 0x05;
-            engineID[4] = 0x06;
-            username = "user2"s;
-
-            session.securityAuthProto = usmHMACSHA1AuthProtocol;
-            session.securityAuthProtoLen =
-                sizeof(usmHMACSHA1AuthProtocol) / sizeof(oid);
-
-            const auto securityAuthKey = "authPass";
-            session.securityAuthKeyLen = USM_AUTH_KU_LEN;
-
-            if (generate_Ku(session.securityAuthProto,
-                            session.securityAuthProtoLen,
-                            (u_char*)(securityAuthKey), strlen(securityAuthKey),
-                            session.securityAuthKey,
-                            &session.securityAuthKeyLen) != SNMPERR_SUCCESS)
-            {
-                snmp_log(
-                    LOG_ERR,
-                    "Error generating Ku from authentication pass phrase. \n");
-                return;
-            }
-        }
-        else if (isAuthenticationKeySet && isEncryptionKeySet)
-        {
-            level = SNMP_SEC_LEVEL_AUTHNOPRIV;
-            engineID[0] = 0x03;
-            engineID[1] = 0x04;
-            engineID[2] = 0x05;
-            engineID[3] = 0x06;
-            engineID[4] = 0x07;
-            username = "user3"s;
-
-            session.securityAuthProto = usmHMACSHA1AuthProtocol;
-            session.securityAuthProtoLen =
-                sizeof(usmHMACSHA1AuthProtocol) / sizeof(oid);
-
-            const auto securityAuthKey = "authPass";
-            session.securityAuthKeyLen = USM_AUTH_KU_LEN;
-
-            if (generate_Ku(session.securityAuthProto,
-                            session.securityAuthProtoLen,
-                            (u_char*)(securityAuthKey), strlen(securityAuthKey),
-                            session.securityAuthKey,
-                            &session.securityAuthKeyLen) != SNMPERR_SUCCESS)
-            {
-                snmp_log(
-                    LOG_ERR,
-                    "Error generating Ku from authentication pass phrase. \n");
-                return;
-            }
-
-            session.securityPrivProto = usmAESPrivProtocol;
-            session.securityPrivProtoLen =
-                sizeof(usmAESPrivProtocol) / sizeof(oid);
-
-            const auto securityPrivKey = "privPass";
-            session.securityPrivKeyLen = USM_PRIV_KU_LEN;
-
-            if (generate_Ku(session.securityAuthProto,
-                            session.securityAuthProtoLen,
-                            (u_char*)(securityPrivKey), strlen(securityPrivKey),
-                            session.securityPrivKey,
-                            &session.securityPrivKeyLen) != SNMPERR_SUCCESS)
-            {
-                char* error = nullptr;
-                snmp_perror(error);
-                std::cerr << "Error generating Ku from encription pass phrase: "
-                          << error << "\n";
-                return;
-            }
-        }
-
-        session.securityEngineID = const_cast<unsigned char*>(engineID);
-        session.securityEngineIDLen = sizeof(engineID) / sizeof(engineID[0]);
-
-        session.securityName = const_cast<char*>(username.data());
-        session.securityNameLen = strlen(session.securityName);
-
-        session.securityLevel = level;
+        result.push_back(byte);
     }
-    else if (version == SNMP_VERSION_2c)
+    return result;
+}
+
+void Agent::setSecurityLevel(int level)
+{
+    session_.securityLevel = level;
+}
+
+void Agent::setAuthProtocol(std::string_view protocol)
+{
+    // TODO Add other auth protocols
+    session_.securityAuthProto = usmHMACSHA1AuthProtocol;
+    session_.securityAuthProtoLen =
+        sizeof(usmHMACSHA1AuthProtocol) / sizeof(oid);
+}
+
+void Agent::setAuthKey(std::string_view key)
+{
+    session_.securityAuthKeyLen = USM_AUTH_KU_LEN;
+    auto securityAuthKey =
+        reinterpret_cast<u_char*>(const_cast<char*>(key.data()));
+    auto securityAuthKeyLen = key.size();
+    if (generate_Ku(session_.securityAuthProto, session_.securityAuthProtoLen,
+                    securityAuthKey, securityAuthKeyLen,
+                    session_.securityAuthKey,
+                    &session_.securityAuthKeyLen) != SNMPERR_SUCCESS)
     {
-        std::cerr << "snmp: version 2c is used" << std::endl;
-        session.version = SNMP_VERSION_2c;
-
-        constexpr auto community = "public";
-        session.community =
-            reinterpret_cast<u_char*>(const_cast<char*>(community));
-        session.community_len = strlen(community);
+        constexpr auto message =
+            "Error generating Ku from authentication pass phrase"sv;
+        throw snmp_exception(message);
     }
+}
 
-    session.callback = nullptr;
-    session.callback_magic = nullptr;
+void Agent::setPrivProtocol(std::string_view protocol)
+{
+    // TODO Add other priv protocols
+    session_.securityPrivProto = usmAESPrivProtocol;
+    session_.securityPrivProtoLen = sizeof(usmAESPrivProtocol) / sizeof(oid);
+}
 
+void Agent::setPrivKey(std::string_view key)
+{
+    session_.securityPrivKeyLen = USM_PRIV_KU_LEN;
+    auto securityPrivKey = reinterpret_cast<u_char*>(const_cast<char*>(key.data()));
+    auto securityPrivKeyLen = key.size();
+    if (generate_Ku(session_.securityAuthProto, session_.securityAuthProtoLen,
+                    securityPrivKey, securityPrivKeyLen,
+                    session_.securityPrivKey,
+                    &session_.securityPrivKeyLen) != SNMPERR_SUCCESS)
+    {
+        constexpr auto message =
+            "Error generating Ku from encription pass phrase"sv;
+        throw snmp_exception(message);
+    }
+}
+
+void Agent::sendTrap(const std::string&& message)
+{
     // Create the session
-    auto ss = snmp_add(
-        &session, netsnmp_transport_open_client("snmptrap", session.peername),
+    netsnmp_session* session = snmp_add(
+        &session_, netsnmp_transport_open_client("snmptrap", session_.peername),
         nullptr, nullptr);
-    if (!ss)
+    if (!session)
     {
-        std::cerr << "Unable to get the snmp session: " << peername << "\n";
-        return;
+        using namespace std::string_literals;
+        const std::string message = "Unable to get the snmp session: "s + std::string(session_.peername);
+        throw snmp_exception(message);
     }
 
     // Create the SNMP trap PDU
-    auto pdu = snmp_pdu_create(SNMP_MSG_TRAP2);
+    netsnmp_pdu* pdu = snmp_pdu_create(SNMP_MSG_TRAP2);
     if (!pdu)
     {
-        std::cerr << "Failed to create notification PDU\n";
-        return;
+        constexpr auto message = "Failed to create notification PDU"sv;
+        throw snmp_exception(message);
     }
 
     // Add the sysUpTime.0 to the trap PDU
@@ -182,9 +156,8 @@ void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet,
                      sysuptimeStr.c_str()))
 
     {
-        std::cerr << "Failed to add the SNMP var: systime\n";
-        snmp_free_pdu(pdu);
-        return;
+        constexpr auto message = "Failed to add the SNMP var: systime"sv;
+        throw snmp_exception(message);
     }
 
     // Add the trapOID.0
@@ -194,37 +167,30 @@ void sendTrap(const std::string& snmpVersion, const bool isAuthenticationKeySet,
                                ASN_OBJECT_ID, id.data(),
                                id.size() * sizeof(id[0])))
     {
-        std::cerr << "Failed to add the SNMP var: trapOID\n";
         snmp_free_pdu(pdu);
-        return;
+        constexpr auto message = "Failed to add the SNMP var: trapOID"sv;
+        throw snmp_exception(message);
     }
 
     // Add trap message
     std::vector<oid> messageOID = {1, 3, 6, 1, 4, 1, 49871, 1, 0, 1, 1};
-    std::string message = "Test trap ("s + "version: "s + snmpVersion +
-                          " auth: "s + std::to_string(isAuthenticationKeySet) +
-                          " priv: "s + std::to_string(isEncryptionKeySet) +
-                          ")"s;
     if (!snmp_pdu_add_variable(pdu, messageOID.data(), messageOID.size(),
                                ASN_OCTET_STR, message.c_str(), message.size()))
     {
-        std::cerr << "Failed to add the SNMP var: message\n";
         snmp_free_pdu(pdu);
-        return;
+        constexpr auto message = "Failed to add the SNMP var: message"sv;
+        throw snmp_exception(message);
     }
 
     // Send the trap
-    if (!snmp_send(ss, pdu))
+    if (!snmp_send(session, pdu))
     {
-        std::cerr << "Failed to send the snmp trap: "
-                  << "\n";
-        return;
+        constexpr auto message = "Failed to send the snmp trap"sv;
+        throw snmp_exception(message);
     }
 
     // Close the session
-    snmp_close(ss);
-
-    // Shutdown the SNMP application
-    snmp_shutdown("snmpapp");
+    snmp_close(session);
 }
+
 } // namespace snmp
