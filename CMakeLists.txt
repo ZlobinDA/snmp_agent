@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 project(snmp_trap_example)
 
-add_executable(send_snmp_trap main.cpp snmp.cpp snmp_exception.cpp)
+add_executable(send_snmp_trap ./src/main.cpp ./src/snmp.cpp ./src/snmp_exception.cpp)
 
 set_target_properties(send_snmp_trap PROPERTIES
     CXX_STANDART 17
