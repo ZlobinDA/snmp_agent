@@ -35,7 +35,7 @@ int main()
             config.version = snmp::version3;
             config.username = "user1"s;
             config.engineID = "01 02 03 04 05"s;
-            config.level = snmp::noAuthNoPriv;
+            config.securityLevel = snmp::noAuthNoPriv;
             snmp::Agent agent(std::move(config));
             std::string message =
                 "Test message for version 3: "s + " noAuthNoPriv"s;
@@ -50,7 +50,7 @@ int main()
             config.version = snmp::version3;
             config.username = "user2"sv;
             config.engineID = "02 03 04 05 06"sv;
-            config.level = snmp::authNoPriv;
+            config.securityLevel = snmp::authNoPriv;
             config.authProtocol = "SHA"sv;
             config.authKey = "authPass123"sv;
             snmp::Agent agent(std::move(config));
@@ -67,7 +67,7 @@ int main()
             config.version = snmp::version3;
             config.username = "user3"sv;
             config.engineID = "03 04 05 06 07"sv;
-            config.level = snmp::authPriv;
+            config.securityLevel = snmp::authPriv;
             config.authProtocol = "SHA"sv;
             config.authKey = "authPass123"sv;
             config.privProtocol = "AES"sv;

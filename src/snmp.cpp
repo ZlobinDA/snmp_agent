@@ -11,10 +11,28 @@ namespace snmp
 
 Agent::Agent(Config&& config) : config_{config}
 {
+    initLibrary();
+    initSession();
+}
+
+Agent::~Agent()
+{
+    closeLibrary();
+}
+
+void Agent::initLibrary()
+{
     init_snmp(config_.appName.c_str());
+}
 
+void Agent::closeLibrary()
+{
+    snmp_shutdown(config_.appName.c_str());
+}
+
+void Agent::initSession()
+{
     snmp_sess_init(&sessionConfig_);
-
     setPeername(config_.peername);
     setVersion(config_.version);
     if (config_.version == version2c)
@@ -25,21 +43,12 @@ Agent::Agent(Config&& config) : config_{config}
     {
         setUsername(config_.username);
         setEngineID(config_.engineID);
-        setSecurityLevel(config_.level);
+        setSecurityLevel(config_.securityLevel);
         setAuthProtocol(config_.authProtocol);
         setAuthKey(config_.authKey);
         setPrivProtocol(config_.privProtocol);
         setPrivKey(config_.privKey);
     }
-    createSession();
-    createTrapPDU();
-    setTrapOID();
-}
-
-Agent::~Agent()
-{
-    closeSession();
-    snmp_shutdown(config_.appName.c_str());
 }
 
 void Agent::setPeername(std::string_view peername)
@@ -112,23 +121,24 @@ std::vector<unsigned char>
     return result;
 }
 
-void Agent::setSecurityLevel(level_t level)
+void Agent::setSecurityLevel(level_t securityLevel)
 {
-    if (level != noAuthNoPriv && level != authNoPriv && level != authPriv)
+    if (securityLevel != noAuthNoPriv && securityLevel != authNoPriv &&
+        securityLevel != authPriv)
     {
         constexpr auto error = "Invalid security level"sv;
         throw snmp_exception(error);
     }
-    sessionConfig_.securityLevel = level;
+    sessionConfig_.securityLevel = securityLevel;
 }
 
 void Agent::setAuthProtocol(std::string_view protocol)
 {
-    if (config_.level == noAuthNoPriv)
+    if (config_.securityLevel == noAuthNoPriv)
     {
         return;
     }
-    if (config_.level != noAuthNoPriv && protocol.empty())
+    if (config_.securityLevel != noAuthNoPriv && protocol.empty())
     {
         constexpr auto error = "auth protocol is empty"sv;
         throw snmp_exception(error);
@@ -141,11 +151,11 @@ void Agent::setAuthProtocol(std::string_view protocol)
 
 void Agent::setAuthKey(std::string_view key)
 {
-    if (config_.level == noAuthNoPriv)
+    if (config_.securityLevel == noAuthNoPriv)
     {
         return;
     }
-    if (config_.level != noAuthNoPriv && key.empty())
+    if (config_.securityLevel != noAuthNoPriv && key.empty())
     {
         constexpr auto error = "auth key is empty"sv;
         throw snmp_exception(error);
@@ -167,11 +177,11 @@ void Agent::setAuthKey(std::string_view key)
 
 void Agent::setPrivProtocol(std::string_view protocol)
 {
-    if (config_.level != authPriv)
+    if (config_.securityLevel != authPriv)
     {
         return;
     }
-    if (config_.level == authPriv && protocol.empty())
+    if (config_.securityLevel == authPriv && protocol.empty())
     {
         constexpr auto error = "priv protocol is empty"sv;
         throw snmp_exception(error);
@@ -184,11 +194,11 @@ void Agent::setPrivProtocol(std::string_view protocol)
 
 void Agent::setPrivKey(std::string_view key)
 {
-    if (config_.level != authPriv)
+    if (config_.securityLevel != authPriv)
     {
         return;
     }
-    if (config_.level == authPriv && key.empty())
+    if (config_.securityLevel == authPriv && key.empty())
     {
         constexpr auto error = "priv key is empty"sv;
         throw snmp_exception(error);
@@ -208,13 +218,13 @@ void Agent::setPrivKey(std::string_view key)
     }
 }
 
-void Agent::createSession()
+void Agent::createTrapSession()
 {
-    session_ = snmp_add(
+    trapSession_ = snmp_add(
         &sessionConfig_,
         netsnmp_transport_open_client("snmptrap", sessionConfig_.peername),
         nullptr, nullptr);
-    if (!session_)
+    if (!trapSession_)
     {
         using namespace std::string_literals;
         const std::string message =
@@ -223,9 +233,12 @@ void Agent::createSession()
     }
 }
 
-void Agent::closeSession()
+void Agent::closeTrapSession()
 {
-    snmp_close(session_);
+    if (trapSession_)
+    {
+        snmp_close(trapSession_);
+    }
 }
 
 void Agent::createTrapPDU()
@@ -279,7 +292,7 @@ void Agent::setTrapMessage(std::string&& message)
 
 void Agent::sendPDU()
 {
-    if (!snmp_send(session_, trapPDU_))
+    if (!snmp_send(trapSession_, trapPDU_))
     {
         constexpr auto message = "Failed to send the snmp trap"sv;
         throw snmp_exception(message);
@@ -288,9 +301,13 @@ void Agent::sendPDU()
 
 void Agent::sendTrap(std::string&& message)
 {
+    createTrapSession();
+    createTrapPDU();
+    setTrapOID();
     setSysUpTime();
     setTrapMessage(std::forward<std::string>(message));
     sendPDU();
+    closeTrapSession();
 }
 
 } // namespace snmp

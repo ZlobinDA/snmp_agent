@@ -28,7 +28,7 @@ struct Config
     std::string communityString;
     std::string username;
     std::string engineID;
-    level_t level;
+    level_t securityLevel;
     std::string authProtocol;
     std::string authKey;
     std::string privProtocol;
@@ -46,18 +46,23 @@ class Agent
     void setUsername(std::string_view name);
     void setPeername(std::string_view peername);
     void setEngineID(std::string_view engineID);
-    void setSecurityLevel(level_t level);
+    void setSecurityLevel(level_t securityLevel);
     void setAuthProtocol(std::string_view protocol);
     void setAuthKey(std::string_view key);
     void setPrivProtocol(std::string_view protocol);
     void setPrivKey(std::string_view key);
 
-    void createSession();
-    void closeSession();
-
     void sendTrap(std::string&& message);
 
   private:
+    void initLibrary();
+    void closeLibrary();
+
+    void initSession();
+
+    void createTrapSession();
+    void closeTrapSession();
+
     void createTrapPDU();
     void setSysUpTime();
     void setTrapOID();
@@ -71,7 +76,7 @@ class Agent
   private:
     Config config_;
     snmp_session sessionConfig_;
-    snmp_session* session_ = nullptr;
+    snmp_session* trapSession_ = nullptr;
     snmp_pdu* trapPDU_ = nullptr;
 };
 
