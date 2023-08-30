@@ -1,0 +1,215 @@
+BMC-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, enterprises FROM SNMPv2-SMI
+;
+
+bmc MODULE-IDENTITY
+    LAST-UPDATED    "202309190000Z"
+    ORGANIZATION    "BMC"
+    CONTACT-INFO
+        "Primary Contact: SNMP support team
+         email:     test@test.com"
+    DESCRIPTION
+        "Added BMC powerstate, senors and inventory table"
+    REVISION        "202309190000Z"
+    DESCRIPTION
+        "First draft"
+    ::= { enterprises 56392 }
+
+bmcState              OBJECT IDENTIFIER ::= { bmc 0 }
+bmcSensors            OBJECT IDENTIFIER ::= { bmc 1 }
+bmcInventory          OBJECT IDENTIFIER ::= { bmc 2 }
+
+--
+
+bmcHostPowerState OBJECT-TYPE
+    SYNTAX          INTEGER { unknown(-1), off(0), on(1) }
+    MAX-ACCESS      read-only
+    STATUS          current
+    DESCRIPTION
+        "Power state of the host"
+    DEFVAL { 0 }
+    ::= { bmcState 1 }
+
+--
+
+--
+
+InventoryType ::= TEXTUAL-CONVENTION
+    STATUS          current
+    DESCRIPTION     "Actual type of inventory"
+    SYNTAX          INTEGER {
+                              CPU(0),
+                              DIMM(1),
+                              DRIVE(2),
+                              FAN(3),
+                            }
+
+bmcInventoryTable OBJECT-TYPE
+    SYNTAX      SEQUENCE OF bmcInventoryEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "Table of inventory items."
+    ::= { bmcInventory 4 }
+
+bmcInventoryEntry OBJECT-TYPE
+    SYNTAX      bmcInventoryEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "An entry containing a inventory item details."
+    INDEX       { bmcInventoryModel }
+    ::= { bmcInventoryTable 1 }
+
+bmcInventoryEntry ::= SEQUENCE {
+    bmcInventoryManufacturer  OCTET STRING,
+    bmcInventoryModel         OCTET STRING,
+    bmcInventoryProperty      OCTET STRING,
+    bmcInventorySerialNumber  OCTET STRING,
+    bmcInventoryType          InventoryType
+}
+
+bmcInventoryManufacturer OBJECT-TYPE
+    SYNTAX      OCTET STRING
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The inventory item manufacturer."
+    ::= { bmcInventoryEntry 1 }
+
+bmcInventoryModel OBJECT-TYPE
+    SYNTAX      OCTET STRING
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The model of the inventory item."
+    ::= { bmcInventoryEntry 2 }
+
+bmcInventoryProperty OBJECT-TYPE
+    SYNTAX      OCTET STRING
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Property of Inventory"
+    ::= { bmcInventoryEntry 3 }
+
+bmcInventorySerialNumber OBJECT-TYPE
+    SYNTAX      OCTET STRING
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Inventory serial number"
+    ::= { bmcInventoryEntry 4 }
+
+bmcInventoryType OBJECT-TYPE
+    SYNTAX      InventoryType
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Inventory type"
+    ::= { bmcInventoryEntry 5 }
+
+--
+
+--
+
+SensorState ::= TEXTUAL-CONVENTION
+    STATUS          current
+    DESCRIPTION     "Actual state of sensor"
+    SYNTAX          INTEGER {
+                              disabled(0),
+                              normal(1),
+                              warningLow(2),
+                              warningHigh(3),
+                              criticalLow(4),
+                              criticalHigh(5)
+                            }
+
+bmcSensorsTable OBJECT-TYPE
+    SYNTAX      SEQUENCE OF bmcSensorsEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "Table of current sensors and their values."
+    ::= { bmcSensors 3 }
+
+bmcSensorEntry OBJECT-TYPE
+    SYNTAX      bmcSensorsEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "An entry containing a device and its statistics."
+    INDEX       { bmcSensorName }
+    ::= { bmcSensorsTable 1 }
+
+bmcSensorsEntry ::= SEQUENCE {
+    bmcSensorName             OCTET STRING,
+    bmcSensorValue            OCTET STRING,
+    bmcSensorWarnLow          OCTET STRING,
+    bmcSensorWarnHigh         OCTET STRING,
+    bmcSensorCritLow          OCTET STRING,
+    bmcSensorCritHigh         OCTET STRING,
+    bmcSensorState            SensorState
+}
+
+bmcSensorName OBJECT-TYPE
+    SYNTAX      OCTET STRING (SIZE(1..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The name of the current sensor."
+    ::= { bmcSensorEntry 1 }
+
+bmcSensorValue OBJECT-TYPE
+    SYNTAX      OCTET STRING (SIZE(1..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The current value from sensor."
+    ::= { bmcSensorEntry 2 }
+
+bmcSensorWarnLow OBJECT-TYPE
+    SYNTAX      OCTET STRING (SIZE(1..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The critical low value of sensor."
+    ::= { bmcSensorEntry 3 }
+
+bmcSensorWarnHigh OBJECT-TYPE
+    SYNTAX      OCTET STRING (SIZE(1..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The critical high value of sensor."
+    ::= { bmcSensorEntry 4 }
+
+bmcSensorCritLow OBJECT-TYPE
+    SYNTAX      OCTET STRING (SIZE(1..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The critical low value of sensor."
+    ::= { bmcSensorEntry 5 }
+
+bmcSensorCritHigh OBJECT-TYPE
+    SYNTAX      OCTET STRING (SIZE(1..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "The critical high value of sensor."
+    ::= { bmcSensorEntry 6 }
+
+bmcSensorState OBJECT-TYPE
+    SYNTAX      SensorState
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "ent state of sensor"
+    ::= { bmcSensorEntry 7 }
+
+--
+
+END

@@ -2,6 +2,7 @@
 
 #include "snmp_exception.h"
 
+#include <cstdlib>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -308,6 +309,39 @@ void Agent::sendTrap(std::string&& message)
     setTrapMessage(std::forward<std::string>(message));
     sendPDU();
     closeTrapSession();
+}
+
+void Agent::openGetSession()
+{
+    getSession_ = snmp_open(&sessionConfig_);
+    if (!getSession_)
+    {
+        constexpr auto message = "Failed at session openning"sv;
+        throw snmp_exception(message);
+    }
+}
+
+void Agent::closeGetSession()
+{
+    if (getSession_)
+    {
+        snmp_close(getSession_);
+    }
+}
+
+void Agent::createGetPDU()
+{
+    getPDU_ = snmp_pdu_create(SNMP_MSG_GET);
+    if (!getPDU_)
+    {
+        constexpr auto message = "Failed to create GetRequest-PDU"sv;
+        throw snmp_exception(message);
+    }
+}
+
+void Agent::get()
+{
+
 }
 
 } // namespace snmp

@@ -60,6 +60,11 @@ class Agent
 
     void initSession();
 
+    void openGetSession();
+    void closeGetSession();
+    void createGetPDU();
+    void get();
+
     void createTrapSession();
     void closeTrapSession();
 
@@ -77,7 +82,9 @@ class Agent
     Config config_;
     snmp_session sessionConfig_;
     snmp_session* trapSession_ = nullptr;
+    snmp_session* getSession_ = nullptr;
     snmp_pdu* trapPDU_ = nullptr;
+    snmp_pdu* getPDU_ = nullptr;
 };
 
 } // namespace snmp
